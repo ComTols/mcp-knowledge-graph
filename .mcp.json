@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "knowledge-graph": {
+      "type": "http",
+      "url": "${KG_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${KG_MCP_TOKEN}"
+      }
+    }
+  }
+}

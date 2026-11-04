@@ -1,0 +1,16 @@
+{
+  "description": "Remind Claude to perform Knowledge Graph retrieval and synchronization on every user turn.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"Knowledge Graph continuous-memory policy: On this turn, search the knowledge-graph MCP before reasoning from prior user/project context. Complete the user's task. Before finishing, follow the knowledge-management skill to persist decisions and precise user/project facts; if none exist, use the minimal monthly interaction journal fallback. Never store universal facts as user knowledge or invent personal facts. Do not reorganize or delete unless explicitly asked.\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

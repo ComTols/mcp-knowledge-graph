@@ -1,0 +1,33 @@
+# Example configuration for mcp-knowledge-graph. Copy to .env (ignored by git)
+# or set the variables in your process environment / secret store.
+# Never commit real tokens or API keys.
+
+# --- MCP server ---
+# Transport: http (Streamable HTTP) or stdio
+KG_MCP_TRANSPORT=http
+KG_MCP_LISTEN_ADDRESS=127.0.0.1:8080
+KG_MCP_REQUIRE_AUTH=true
+KG_MCP_BEARER_TOKEN=<set-a-long-random-secret-of-at-least-32-characters>
+# KG_MCP_TRUSTED_ORIGINS=https://app.example.com
+# KG_MCP_MAX_REQUEST_BYTES=2097152
+# KG_MCP_REQUEST_TIMEOUT=30s
+# KG_MCP_SHUTDOWN_TIMEOUT=10s
+# KG_MCP_SESSION_TIMEOUT=30m
+# KG_MCP_RUN_INDEXER=true
+# KG_MCP_LOG_LEVEL=info
+
+# --- Database ---
+KG_DATABASE_URL=postgres://kg:kg@localhost:5433/kg?sslmode=disable
+
+# --- Embeddings (OpenAI-compatible /embeddings endpoint) ---
+KG_EMBEDDING_BASE_URL=https://api.openai.com/v1
+KG_EMBEDDING_MODEL=text-embedding-3-small
+KG_EMBEDDING_DIMENSIONS=1024
+KG_EMBEDDING_API_KEY=<load-from-secret-store>
+
+# --- Docker Compose (docker compose up -d) ---
+# Compose uses the same .env. It overrides KG_DATABASE_URL and KG_MCP_LISTEN_ADDRESS itself.
+POSTGRES_PASSWORD=<generate: openssl rand -hex 24>
+# KG_IMAGE_TAG=latest
+# KG_MCP_PUBLISH=8080
+# KG_POSTGRES_PORT=5433

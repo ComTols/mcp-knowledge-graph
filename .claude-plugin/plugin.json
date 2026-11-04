@@ -1,0 +1,8 @@
+{
+  "name": "knowledge-graph",
+  "version": "1.0.0",
+  "description": "Persistent, structured knowledge management for AI agents using a semantic knowledge graph.",
+  "author": {
+    "name": "ComTols"
+  }
+}

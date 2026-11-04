@@ -1,0 +1,60 @@
+# Runs the complete stack (MCP server + PostgreSQL/pgvector) from the published image.
+#
+#   cp .env.example .env        # then fill in the secrets (see below)
+#   docker compose up -d
+#
+# Required secrets (compose refuses to start without them):
+#   POSTGRES_PASSWORD      database password
+#   KG_MCP_BEARER_TOKEN    bearer token for MCP clients, at least 32 characters
+#                          e.g. `openssl rand -hex 32`
+#   KG_EMBEDDING_API_KEY   API key of the embedding provider
+#
+# Pin a release instead of `latest` with KG_IMAGE_TAG=0.0.1.
+# The MCP endpoint is then reachable on http://<host>:8080 (health: /healthz, /readyz).
+# Put a TLS-terminating reverse proxy in front of it for public access.
+services:
+  mcp-knowledge-graph:
+    image: ghcr.io/comtols/mcp-knowledge-graph:${KG_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${KG_MCP_PUBLISH:-8080}:8080"
+    environment:
+      KG_MCP_TRANSPORT: http
+      KG_MCP_LISTEN_ADDRESS: 0.0.0.0:8080
+      KG_MCP_REQUIRE_AUTH: "true"
+      KG_MCP_BEARER_TOKEN: ${KG_MCP_BEARER_TOKEN:?set KG_MCP_BEARER_TOKEN (min. 32 characters)}
+      KG_MCP_TRUSTED_ORIGINS: ${KG_MCP_TRUSTED_ORIGINS:-}
+      KG_MCP_LOG_LEVEL: ${KG_MCP_LOG_LEVEL:-info}
+      KG_DATABASE_URL: postgres://${POSTGRES_USER:-kg}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-kg}?sslmode=disable
+      KG_EMBEDDING_BASE_URL: ${KG_EMBEDDING_BASE_URL:-https://api.openai.com/v1}
+      KG_EMBEDDING_MODEL: ${KG_EMBEDDING_MODEL:-text-embedding-3-small}
+      KG_EMBEDDING_DIMENSIONS: ${KG_EMBEDDING_DIMENSIONS:-1024}
+      KG_EMBEDDING_API_KEY: ${KG_EMBEDDING_API_KEY:?set KG_EMBEDDING_API_KEY}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-kg}
+    # Only bound to localhost (backups, psql, integration tests). Not reachable from outside.
+    ports:
+      - "127.0.0.1:${KG_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - kg-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  kg-pgdata:
