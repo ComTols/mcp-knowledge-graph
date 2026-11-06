@@ -72,6 +72,25 @@ Or in a project's `.mcp.json` (the token is read from your environment):
 
 Any other MCP client that supports Streamable HTTP with a custom `Authorization` header works the same way.
 
+## Web UI
+
+Next to `/mcp` the server ships a small browser UI (embedded in the binary, no extra service):
+
+| Path | What it does |
+|---|---|
+| `/ui/` | Interactive graph (Cytoscape.js). Bold blue edges lead to the primary parent, thin dashed orange edges to further parents. Hover a node for its summary, click it to open the document |
+| `/ui/viewer?id=<uuid>` | Markdown viewer for one document, with links to its parents and a back button |
+| `GET /graph` | The complete graph as Cytoscape.js JSON (`{"elements":{"nodes":[…],"edges":[…]}}`). The primary parent is `data.parent` of a node, every further parent is an edge with the class `secondary-parent` |
+| `GET /graph/fulltext?id=<uuid>` | One document as server-rendered Markdown (title, summary, parent links, content blocks) |
+
+Everything is protected by the same token as `/mcp`. Open `http://localhost:8080/ui/` in a browser; the login dialog accepts any user name and `KG_MCP_BEARER_TOKEN` as password. Scripts can use `Authorization: Bearer …` instead:
+
+```bash
+curl -H "Authorization: Bearer $KG_MCP_BEARER_TOKEN" http://localhost:8080/graph
+```
+
+Set `KG_MCP_PUBLIC_URL` (e.g. `https://kg.example.com`) so that the parent links in the Markdown returned by `/graph/fulltext` are absolute and clickable from any client.
+
 ## Tools
 
 | Tool | Type | What it does |
@@ -123,6 +142,7 @@ All settings are environment variables. With Docker Compose, put them in `.env`.
 | `KG_MCP_LISTEN_ADDRESS` | `127.0.0.1:8080` | HTTP listen address (set to `0.0.0.0:8080` by Compose) |
 | `KG_MCP_REQUIRE_AUTH` | `true` | Require the bearer token. Only disable for local development |
 | `KG_MCP_TRUSTED_ORIGINS` | – | Comma-separated browser origins allowed to call `/mcp` |
+| `KG_MCP_PUBLIC_URL` | – | Public base URL of the server, e.g. `https://kg.example.com` (a path prefix is allowed). Used for the parent links in the web viewer; without it the links are root-relative (`/ui/viewer?id=…`) |
 | `KG_MCP_MAX_REQUEST_BYTES` | `2097152` | Maximum request body size |
 | `KG_MCP_REQUEST_TIMEOUT` | `30s` | Timeout of a single tool call |
 | `KG_MCP_SHUTDOWN_TIMEOUT` | `10s` | Grace period for in-flight requests on shutdown |

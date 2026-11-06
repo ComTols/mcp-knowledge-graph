@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -43,11 +44,219 @@ func newTestHTTPServer(t *testing.T, svc Service, cfg *Config, pinger Pinger) (*
 	t.Helper()
 	logger, buf := logBuffer()
 	server := NewServer(svc, Options{Logger: logger})
-	handler, err := NewHTTPHandler(server, cfg, pinger, logger)
+	handler, err := NewHTTPHandler(server, cfg, pinger, fakeGraph{}, logger)
 	require.NoError(t, err)
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	return ts, buf
+}
+
+type fakeGraph struct{}
+
+func (fakeGraph) GetGraph(context.Context) (knowledge.Graph, error) {
+	root, child := uuid.New(), uuid.New()
+	return knowledge.Graph{Elements: knowledge.GraphElements{
+		Nodes: []knowledge.GraphNode{
+			{Data: knowledge.GraphNodeData{ID: root, Name: "root"}},
+			{Data: knowledge.GraphNodeData{ID: child, Name: "child", Parent: &root}},
+		},
+		Edges: []knowledge.GraphEdge{},
+	}}, nil
+}
+
+var (
+	fakeDocID    = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	fakeParentID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
+)
+
+func (fakeGraph) GetDocument(_ context.Context, id uuid.UUID) (knowledge.Document, error) {
+	if id != fakeDocID {
+		return knowledge.Document{}, knowledge.ErrNotFound
+	}
+	return knowledge.Document{
+		DocumentSummary: knowledge.DocumentSummary{ID: id, Title: "Doc", Summary: "Sum"},
+		Parents:         []knowledge.ParentRef{{ID: fakeParentID, Title: "Par [x]", IsPrimary: true}},
+		Blocks:          []knowledge.Block{{Content: "First"}, {Content: "Second"}},
+	}, nil
+}
+
+func TestFulltextParentLinksUsePublicURL(t *testing.T) {
+	cfg := httpConfig()
+	cfg.PublicURL = "https://kg.example.com/prefix/"
+	ts, _ := newTestHTTPServer(t, &fakeService{}, cfg, nil)
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/graph/fulltext?id="+fakeDocID.String(), nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(resp.Body)
+	assert.Contains(t, buf.String(), "](https://kg.example.com/prefix/ui/viewer?id="+fakeParentID.String()+")")
+}
+
+func TestFulltextEndpoint(t *testing.T) {
+	ts, _ := newTestHTTPServer(t, &fakeService{}, httpConfig(), nil)
+	get := func(path string, auth bool) (*http.Response, string) {
+		req, err := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		require.NoError(t, err)
+		if auth {
+			req.Header.Set("Authorization", "Bearer "+testToken)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(resp.Body)
+		return resp, buf.String()
+	}
+
+	resp, _ := get("/graph/fulltext?id="+fakeDocID.String(), false)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	resp, body := get("/graph/fulltext?id="+fakeDocID.String(), true)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "text/markdown")
+	want := strings.Join([]string{
+		"# Doc",
+		"",
+		"Sum",
+		"",
+		"---",
+		"",
+		"## Parents",
+		"",
+		`- [Par \[x\]](/ui/viewer?id=` + fakeParentID.String() + `)`,
+		"",
+		"---",
+		"",
+		"First",
+		"",
+		"Second",
+		"",
+	}, "\n")
+	assert.Equal(t, want, body)
+
+	resp, _ = get("/graph/fulltext?id=nope", true)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp, _ = get("/graph/fulltext", true)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp, _ = get("/graph/fulltext?id="+uuid.NewString(), true)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	// The viewer page is served behind auth, too.
+	resp, _ = get("/ui/viewer", false)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp, body = get("/ui/viewer?id="+fakeDocID.String(), true)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, body, "viewer.js")
+}
+
+func TestGraphEndpointRequiresBearerToken(t *testing.T) {
+	ts, _ := newTestHTTPServer(t, &fakeService{}, httpConfig(), nil)
+
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodHead, http.MethodOptions} {
+		for name, header := range map[string]string{
+			"missing":     "",
+			"wrong token": "Bearer wrong-token-0123456789-abcdefghijklmnop",
+		} {
+			req, err := http.NewRequest(method, ts.URL+"/graph", nil)
+			require.NoError(t, err)
+			if header != "" {
+				req.Header.Set("Authorization", header)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "%s %s", method, name)
+		}
+	}
+}
+
+func TestUIRequiresAuthAndServesFrontend(t *testing.T) {
+	ts, _ := newTestHTTPServer(t, &fakeService{}, httpConfig(), nil)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	for _, path := range []string{"/ui", "/ui/", "/ui/app.js", "/ui/cytoscape.min.js"} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			req, err := http.NewRequest(method, ts.URL+path, nil)
+			require.NoError(t, err)
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "%s %s", method, path)
+		}
+	}
+	// A wrong Basic password is rejected, too.
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/ui/", nil)
+	req.SetBasicAuth("u", "wrong-token-0123456789-abcdefghijklmnop")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Basic auth (browser login) works for the UI and the graph.
+	for path, wantType := range map[string]string{"/ui/": "text/html", "/ui/app.js": "javascript", "/graph": "application/json"} {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		req.SetBasicAuth("anyone", testToken)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode, path)
+		assert.Contains(t, resp.Header.Get("Content-Type"), wantType, path)
+	}
+
+	// /ui redirects to /ui/ after authentication.
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/ui", nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusMovedPermanently, resp.StatusCode)
+	assert.Equal(t, "/ui/", resp.Header.Get("Location"))
+
+	// /mcp does not accept Basic auth.
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader("{}"))
+	req.SetBasicAuth("anyone", testToken)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestGraphEndpointReturnsCytoscapeJSON(t *testing.T) {
+	ts, _ := newTestHTTPServer(t, &fakeService{}, httpConfig(), nil)
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/graph", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var got struct {
+		Elements struct {
+			Nodes []struct {
+				Data map[string]any `json:"data"`
+			} `json:"nodes"`
+			Edges []any `json:"edges"`
+		} `json:"elements"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	require.Len(t, got.Elements.Nodes, 2)
+	assert.Equal(t, "root", got.Elements.Nodes[0].Data["name"])
+	assert.NotContains(t, got.Elements.Nodes[0].Data, "parent")
+	assert.Equal(t, got.Elements.Nodes[0].Data["id"], got.Elements.Nodes[1].Data["parent"])
+	assert.NotNil(t, got.Elements.Edges)
+
+	req.Method = http.MethodPost
+	resp2, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp2.Body.Close()
+	assert.Equal(t, http.StatusMethodNotAllowed, resp2.StatusCode)
 }
 
 func TestMCPEndpointRequiresBearerTokenForAllMethods(t *testing.T) {

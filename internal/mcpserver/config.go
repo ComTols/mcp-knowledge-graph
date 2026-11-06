@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -36,6 +37,11 @@ type Config struct {
 	// TrustedOrigins are browser origins (e.g. https://app.example.com)
 	// that may send cross-origin requests to /mcp.
 	TrustedOrigins []string `env:"KG_MCP_TRUSTED_ORIGINS" envSeparator:","`
+	// PublicURL is the externally reachable base URL of this server (e.g.
+	// https://kg.example.com, a path prefix is allowed). It is used for the
+	// absolute parent links in the viewer Markdown; empty yields
+	// root-relative links.
+	PublicURL string `env:"KG_MCP_PUBLIC_URL"`
 	// MaxRequestBytes limits the HTTP request body size.
 	MaxRequestBytes int64 `env:"KG_MCP_MAX_REQUEST_BYTES" envDefault:"2097152"`
 	// RequestTimeout bounds the execution of a single tool call.
@@ -115,6 +121,15 @@ func (c *Config) validateHTTP() []error {
 	} else if err == nil && !isLoopbackHost(host) && !c.AllowUnauthenticatedNonLoopback {
 		errs = append(errs, fmt.Errorf("KG_MCP_REQUIRE_AUTH=false is only allowed on a loopback address, got %q "+
 			"(development-only override: KG_MCP_DEV_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true)", c.ListenAddress))
+	}
+	if c.PublicURL != "" {
+		u, perr := url.Parse(c.PublicURL)
+		switch {
+		case perr != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
+			errs = append(errs, fmt.Errorf("KG_MCP_PUBLIC_URL must be an absolute http(s) URL such as https://kg.example.com, got %q", c.PublicURL))
+		case u.RawQuery != "" || u.Fragment != "" || u.User != nil:
+			errs = append(errs, errors.New("KG_MCP_PUBLIC_URL must not contain user info, query or fragment"))
+		}
 	}
 	for _, o := range c.TrustedOrigins {
 		if strings.TrimSpace(o) == "" {

@@ -27,6 +27,7 @@ services:
       KG_MCP_REQUIRE_AUTH: "true"
       KG_MCP_BEARER_TOKEN: ${KG_MCP_BEARER_TOKEN:?set KG_MCP_BEARER_TOKEN (min. 32 characters)}
       KG_MCP_TRUSTED_ORIGINS: ${KG_MCP_TRUSTED_ORIGINS:-}
+      KG_MCP_PUBLIC_URL: ${KG_MCP_PUBLIC_URL:-}
       KG_MCP_LOG_LEVEL: ${KG_MCP_LOG_LEVEL:-info}
       KG_DATABASE_URL: postgres://${POSTGRES_USER:-kg}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-kg}?sslmode=disable
       KG_EMBEDDING_BASE_URL: ${KG_EMBEDDING_BASE_URL:-https://api.openai.com/v1}

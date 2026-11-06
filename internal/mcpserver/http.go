@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"mcp-knowledge-graph/internal/webui"
 )
 
 // BearerAuth rejects every request (all HTTP methods) without the expected
@@ -35,6 +37,37 @@ func BearerAuth(token string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// BrowserAuth protects the browser facing routes (/ui, /graph). It accepts
+// the same static token either as "Authorization: Bearer <token>" or as the
+// password of HTTP Basic auth (any user name), so that a browser can open the
+// UI with its native login prompt and then send the credentials on its own
+// same-origin requests. /mcp keeps accepting Bearer only.
+func BrowserAuth(token string, next http.Handler) http.Handler {
+	want := sha256.Sum256([]byte(token))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, ok := bearerToken(r.Header.Get("Authorization"))
+		if !ok {
+			_, got, ok = r.BasicAuth()
+		}
+		if !ok || got == "" {
+			basicChallenge(w)
+			return
+		}
+		sum := sha256.Sum256([]byte(got))
+		if subtle.ConstantTimeCompare(sum[:], want[:]) != 1 {
+			basicChallenge(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func basicChallenge(w http.ResponseWriter) {
+	w.Header().Add("WWW-Authenticate", `Basic realm="knowledge-graph", charset="UTF-8"`)
+	w.Header().Add("WWW-Authenticate", `Bearer realm="knowledge-graph"`)
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
 }
 
 func bearerToken(header string) (string, bool) {
@@ -61,7 +94,13 @@ func unauthorized(w http.ResponseWriter, errCode string) {
 //     cfg.RequireAuth),
 //   - GET /healthz: process liveness,
 //   - GET /readyz: backend readiness (pinger may be nil).
-func NewHTTPHandler(server *mcp.Server, cfg *Config, pinger Pinger, logger *slog.Logger) (http.Handler, error) {
+//   - GET /graph: the complete graph as Cytoscape.js JSON (authenticated like
+//     /mcp; only registered if graph is non-nil),
+//   - GET /graph/fulltext?id=<uuid>: one document as Markdown for the viewer
+//     (same auth),
+//   - /ui/ and /ui/viewer: embedded Cytoscape.js frontend for /graph (same auth; Basic auth
+//     with the token as password is accepted so browsers can log in).
+func NewHTTPHandler(server *mcp.Server, cfg *Config, pinger Pinger, graph GraphSource, logger *slog.Logger) (http.Handler, error) {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -95,6 +134,24 @@ func NewHTTPHandler(server *mcp.Server, cfg *Config, pinger Pinger, logger *slog
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcpHandler)
+	if graph != nil {
+		var gh http.Handler = graphHandler(graph, cfg.RequestTimeout, logger)
+		var ft http.Handler = fulltextHandler(graph, strings.TrimRight(cfg.PublicURL, "/"), cfg.RequestTimeout, logger)
+		ui := webui.Handler()
+		var redirect http.Handler = http.RedirectHandler("/ui/", http.StatusMovedPermanently)
+		if cfg.RequireAuth {
+			gh = BrowserAuth(cfg.BearerToken, gh)
+			ft = BrowserAuth(cfg.BearerToken, ft)
+			ui = BrowserAuth(cfg.BearerToken, ui)
+			redirect = BrowserAuth(cfg.BearerToken, redirect)
+		}
+		// All methods are routed so that unauthenticated requests always get
+		// 401; the handlers themselves only accept GET/HEAD.
+		mux.Handle("/graph", gh)
+		mux.Handle("/graph/fulltext", ft)
+		mux.Handle("/ui/", ui)
+		mux.Handle("/ui", redirect)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok"))

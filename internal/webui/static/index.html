@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Knowledge Graph</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <strong>Knowledge Graph</strong>
+    <span id="stats"></span>
+    <label>Layout
+      <select id="layout">
+        <option value="cose">Kräfte (cose)</option>
+        <option value="breadthfirst">Hierarchie</option>
+        <option value="concentric">Konzentrisch</option>
+      </select>
+    </label>
+    <button id="fit" type="button">Einpassen</button>
+    <span class="legend"><i class="primary"></i>Haupt-Parent <i class="secondary"></i>weiterer Parent</span>
+  </header>
+  <div id="cy"></div>
+  <div id="tip" hidden></div>
+  <div id="msg" hidden></div>
+  <script src="cytoscape.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -123,7 +123,7 @@ func run() error {
 			logger.Warn("authentication is disabled; only use this for local development")
 		}
 		var handler http.Handler
-		if handler, err = mcpserver.NewHTTPHandler(server, &cfg, store, logger); err == nil {
+		if handler, err = mcpserver.NewHTTPHandler(server, &cfg, store, store, logger); err == nil {
 			err = mcpserver.ServeHTTP(ctx, &cfg, handler, logger)
 		}
 	}
