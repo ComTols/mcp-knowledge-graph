@@ -96,13 +96,15 @@ func (s *Store) GetDocument(ctx context.Context, documentID uuid.UUID) (knowledg
 	return doc, nil
 }
 
-// RenderDocument renders the deterministic Markdown view of a document.
-func (s *Store) RenderDocument(ctx context.Context, documentID uuid.UUID) (string, error) {
+// RenderDocument renders the deterministic Markdown view of a document (see
+// knowledge.RenderViewerMarkdown). baseURL prefixes the parent and child
+// links; empty yields root-relative links.
+func (s *Store) RenderDocument(ctx context.Context, documentID uuid.UUID, baseURL string) (string, error) {
 	doc, err := s.GetDocument(ctx, documentID)
 	if err != nil {
 		return "", err
 	}
-	return knowledge.RenderMarkdown(doc), nil
+	return knowledge.RenderViewerMarkdown(doc, baseURL), nil
 }
 
 func getSummary(ctx context.Context, q querier, id uuid.UUID) (knowledge.DocumentSummary, error) {
@@ -124,7 +126,7 @@ func getParents(ctx context.Context, q querier, id uuid.UUID) ([]knowledge.Paren
 		return nil, err
 	}
 	rows, err := q.Query(ctx, `
-		SELECT p.id, p.title, dp.is_primary
+		SELECT p.id, p.title, p.summary, dp.is_primary
 		FROM document_parents dp
 		JOIN documents p ON p.id = dp.parent_id
 		WHERE dp.child_id = $1
@@ -134,7 +136,7 @@ func getParents(ctx context.Context, q querier, id uuid.UUID) ([]knowledge.Paren
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (knowledge.ParentRef, error) {
 		var p knowledge.ParentRef
-		err := r.Scan(&p.ID, &p.Title, &p.IsPrimary)
+		err := r.Scan(&p.ID, &p.Title, &p.Summary, &p.IsPrimary)
 		return p, err
 	})
 	if err != nil {

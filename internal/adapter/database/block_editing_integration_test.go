@@ -671,9 +671,9 @@ func TestBlockEditing14Ordering(t *testing.T) {
 	assert.Equal(t, want, blockContents(full.Blocks))
 	assert.Equal(t, res.NewVersion, full.Version)
 
-	md, err := db.Store.RenderDocument(ctx, doc.ID)
+	md, err := db.Store.RenderDocument(ctx, doc.ID, "")
 	require.NoError(t, err)
-	assert.Contains(t, md, "## Content\n\nC\n\nA\n\nnew\n\nB\n")
+	assert.Contains(t, md, "---\n\nC\n\nA\n\nnew\n\nB\n")
 }
 
 // 15: edits never touch other documents.

@@ -509,13 +509,14 @@ import (
 
 ## 9. Deterministic Markdown rendering
 
-The database does **not** store the same child lists or parent summaries several times. `RenderDocument(documentID)`, and later exports, always generate the following format:
+The database does **not** store the same child lists or parent summaries several times. `RenderDocument(documentID, baseURL)`, the web viewer (`GET /graph/fulltext`) and later exports all use `knowledge.RenderViewerMarkdown` and generate the following format:
 
 1. **Title** (H1)
-2. **Summary** (one paragraph)
-3. **Direct subtopics**: list of a link to the child ID/file, title and the **current** child summary (if empty: omit the section or consistently define "No subtopics")
-4. **Full text**: `content_blocks` by position, Markdown unchanged
-5. **Sources**: external links to original conversations, if present
+2. **Summary** (one paragraph), followed by `---`
+3. **Parents**: direct parents, primary first, each with a link, title and the **current** parent summary (omitted for the root)
+4. **Children**: direct children, each with a link, title and the **current** child summary (omitted if there are none); a `---` follows if 3. or 4. is present
+5. **Full text**: `content_blocks` by position, Markdown unchanged
+6. **Sources**: external links to original conversations, if present
 
 Example:
 
@@ -524,12 +525,18 @@ Example:
 
 Security measures for HTTP servers in Go.
 
-## Subtopics
+---
 
-- [HTTP Timeouts](document://<child-uuid>) — Protection against slow clients.
-- [Request Validation](document://<child-uuid>) — Validation of incoming requests.
+## Parents
 
-## Content
+- [Backend](https://kg.example.com/ui/viewer?id=<parent-uuid>)<br>Reliable backend structures.
+
+## Children
+
+- [HTTP Timeouts](https://kg.example.com/ui/viewer?id=<child-uuid>)<br>Protection against slow clients.
+- [Request Validation](https://kg.example.com/ui/viewer?id=<child-uuid>)<br>Validation of incoming requests.
+
+---
 
 HTTP servers should define safe timeouts ...
 
@@ -540,7 +547,7 @@ Middleware can validate incoming requests ...
 - [Original conversation](https://example.invalid/permanent/conversation/123)
 ```
 
-The `document://<uuid>` links are **only symbolic placeholders for later client/export resolution**, not standardized Obsidian links. When exporting to Obsidian, stable file-based Markdown links or Obsidian wikilinks with **ID-stable file names** can be generated. Titles can change, therefore **never derive relationships from titles**.
+Parent and child links point to the web viewer by document ID (`<baseURL>/ui/viewer?id=<uuid>`; empty `baseURL` yields root-relative links). Summaries are collapsed to one line; `<br>` is omitted for an empty summary. When exporting to Obsidian, stable file-based Markdown links or Obsidian wikilinks with **ID-stable file names** can be generated. Titles can change, therefore **never derive relationships from titles**.
 
 ## 10. Non-goals and explicitly later extensions
 

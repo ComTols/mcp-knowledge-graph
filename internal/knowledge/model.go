@@ -54,6 +54,7 @@ type DocumentSummary struct {
 type ParentRef struct {
 	ID        uuid.UUID `json:"id"`
 	Title     string    `json:"title"`
+	Summary   string    `json:"summary"`
 	IsPrimary bool      `json:"isPrimary"`
 }
 

@@ -47,7 +47,7 @@ func TestRoundtripAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 	pathsBefore, err := store.GetPaths(ctx, doc.ID, true)
 	require.NoError(t, err)
-	renderedBefore, err := store.RenderDocument(ctx, doc.ID)
+	renderedBefore, err := store.RenderDocument(ctx, doc.ID, "")
 	require.NoError(t, err)
 	store.Close()
 
@@ -68,7 +68,7 @@ func TestRoundtripAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pathsBefore, pathsAfter)
 	require.Len(t, pathsAfter.Paths, 2)
-	renderedAfter, err := reopened.RenderDocument(ctx, doc.ID)
+	renderedAfter, err := reopened.RenderDocument(ctx, doc.ID, "")
 	require.NoError(t, err)
 	assert.Equal(t, renderedBefore, renderedAfter)
 

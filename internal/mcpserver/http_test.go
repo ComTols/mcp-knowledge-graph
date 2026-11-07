@@ -67,6 +67,7 @@ func (fakeGraph) GetGraph(context.Context) (knowledge.Graph, error) {
 var (
 	fakeDocID    = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	fakeParentID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	fakeChildID  = uuid.MustParse("33333333-3333-3333-3333-333333333333")
 )
 
 func (fakeGraph) GetDocument(_ context.Context, id uuid.UUID) (knowledge.Document, error) {
@@ -75,7 +76,8 @@ func (fakeGraph) GetDocument(_ context.Context, id uuid.UUID) (knowledge.Documen
 	}
 	return knowledge.Document{
 		DocumentSummary: knowledge.DocumentSummary{ID: id, Title: "Doc", Summary: "Sum"},
-		Parents:         []knowledge.ParentRef{{ID: fakeParentID, Title: "Par [x]", IsPrimary: true}},
+		Parents:         []knowledge.ParentRef{{ID: fakeParentID, Title: "Par [x]", Summary: "Parent sum", IsPrimary: true}},
+		Children:        []knowledge.ChildRef{{ID: fakeChildID, Title: "Kid", Summary: "ignored"}},
 		Blocks:          []knowledge.Block{{Content: "First"}, {Content: "Second"}},
 	}, nil
 }
@@ -127,7 +129,11 @@ func TestFulltextEndpoint(t *testing.T) {
 		"",
 		"## Parents",
 		"",
-		`- [Par \[x\]](/ui/viewer?id=` + fakeParentID.String() + `)`,
+		`- [Par \[x\]](/ui/viewer?id=` + fakeParentID.String() + `)<br>Parent sum`,
+		"",
+		"## Children",
+		"",
+		`- [Kid](/ui/viewer?id=` + fakeChildID.String() + `)<br>ignored`,
 		"",
 		"---",
 		"",

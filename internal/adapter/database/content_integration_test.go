@@ -71,14 +71,17 @@ func TestRenderDocument(t *testing.T) {
 	timeouts := db.create(t, "HTTP Timeouts", "Protection against slow clients.", doc.ID)
 	validation := db.create(t, "Request Validation", "Validation of incoming requests.", doc.ID)
 
-	md, err := db.Store.RenderDocument(ctx, doc.ID)
+	md, err := db.Store.RenderDocument(ctx, doc.ID, "https://kg.example.com")
 	require.NoError(t, err)
 	want := "# Go HTTP Server Hardening\n\n" +
 		"Security measures for HTTP servers in Go.\n\n" +
-		"## Subtopics\n\n" +
-		"- [HTTP Timeouts](document://" + timeouts.ID.String() + ") — Protection against slow clients.\n" +
-		"- [Request Validation](document://" + validation.ID.String() + ") — Validation of incoming requests.\n\n" +
-		"## Content\n\n" +
+		"---\n\n" +
+		"## Parents\n\n" +
+		"- [root](https://kg.example.com/ui/viewer?id=" + root.String() + ")<br>Top-level entry point of the knowledge base.\n\n" +
+		"## Children\n\n" +
+		"- [HTTP Timeouts](https://kg.example.com/ui/viewer?id=" + timeouts.ID.String() + ")<br>Protection against slow clients.\n" +
+		"- [Request Validation](https://kg.example.com/ui/viewer?id=" + validation.ID.String() + ")<br>Validation of incoming requests.\n\n" +
+		"---\n\n" +
 		"HTTP servers should define safe timeouts ...\n\n" +
 		"Middleware can validate incoming requests ...\n\n" +
 		"## Sources\n\n" +
@@ -97,10 +100,22 @@ func TestRenderDocument(t *testing.T) {
 	_, err = db.Store.UpdateDocumentMetadata(ctx, timeouts.ID, timeouts.Version,
 		knowledge.MetadataUpdate{Summary: ptr("Read/Write/Idle-Timeouts.")})
 	require.NoError(t, err)
-	md, err = db.Store.RenderDocument(ctx, doc.ID)
+	md, err = db.Store.RenderDocument(ctx, doc.ID, "")
 	require.NoError(t, err)
-	assert.True(t, strings.Contains(md, "— Read/Write/Idle-Timeouts.\n"))
-	assert.NotContains(t, md, "langsamen Clients")
+	assert.True(t, strings.Contains(md, "<br>Read/Write/Idle-Timeouts.\n"))
+	assert.NotContains(t, md, "Protection against slow clients.")
+
+	// Likewise, the parent summary is rendered from the parent.
+	md, err = db.Store.RenderDocument(ctx, timeouts.ID, "")
+	require.NoError(t, err)
+	assert.Contains(t, md, "## Parents\n\n- [Go HTTP Server Hardening](/ui/viewer?id="+doc.ID.String()+")<br>Security measures for HTTP servers in Go.\n")
+	_, err = db.Store.UpdateDocumentMetadata(ctx, doc.ID, doc.Version,
+		knowledge.MetadataUpdate{Summary: ptr("Hardened HTTP servers.")})
+	require.NoError(t, err)
+	md, err = db.Store.RenderDocument(ctx, timeouts.ID, "")
+	require.NoError(t, err)
+	assert.Contains(t, md, "<br>Hardened HTTP servers.\n")
+	assert.NotContains(t, md, "Security measures for HTTP servers in Go.")
 }
 
 // Acceptance 3 + 12: aggregated view.
@@ -120,8 +135,8 @@ func TestGetDocument(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, doc.DocumentSummary, got.DocumentSummary)
 	assert.Equal(t, []knowledge.ParentRef{
-		{ID: parent.ID, Title: "Parent", IsPrimary: true},
-		{ID: root, Title: "root", IsPrimary: false},
+		{ID: parent.ID, Title: "Parent", Summary: "p", IsPrimary: true},
+		{ID: root, Title: "root", Summary: "Top-level entry point of the knowledge base.", IsPrimary: false},
 	}, got.Parents)
 	assert.Equal(t, []knowledge.ChildRef{{ID: child.ID, Title: "Child", Summary: "c", IsPrimary: true}}, got.Children)
 	assert.Equal(t, []string{"b0"}, blockContents(got.Blocks))

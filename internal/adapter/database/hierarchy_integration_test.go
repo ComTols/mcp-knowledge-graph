@@ -121,7 +121,7 @@ func TestCreateDocument(t *testing.T) {
 
 	parents, err := db.Store.GetParents(ctx, doc.ID)
 	require.NoError(t, err)
-	assert.Equal(t, []knowledge.ParentRef{{ID: minkter.ID, Title: "Minkter", IsPrimary: true}}, parents)
+	assert.Equal(t, []knowledge.ParentRef{{ID: minkter.ID, Title: "Minkter", Summary: "Projekt Minkter", IsPrimary: true}}, parents)
 
 	paths, err := db.Store.GetPaths(ctx, doc.ID, false)
 	require.NoError(t, err)
@@ -152,8 +152,8 @@ func TestMultipleParents(t *testing.T) {
 	parents, err := db.Store.GetParents(ctx, doc.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []knowledge.ParentRef{
-		{ID: backend.ID, Title: "Reliable Backend Structures", IsPrimary: true},
-		{ID: ai.ID, Title: "AI", IsPrimary: false},
+		{ID: backend.ID, Title: "Reliable Backend Structures", Summary: "b", IsPrimary: true},
+		{ID: ai.ID, Title: "AI", Summary: "k", IsPrimary: false},
 	}, parents)
 
 	for _, p := range []uuid.UUID{backend.ID, ai.ID} {
@@ -289,7 +289,7 @@ func TestRemoveParent(t *testing.T) {
 	parents, err := db.Store.GetParents(ctx, child.ID)
 	require.NoError(t, err)
 	require.Len(t, parents, 2)
-	assert.Equal(t, knowledge.ParentRef{ID: p3.ID, Title: "P3", IsPrimary: true}, parents[0])
+	assert.Equal(t, knowledge.ParentRef{ID: p3.ID, Title: "P3", Summary: "p", IsPrimary: true}, parents[0])
 
 	require.NoError(t, db.Store.RemoveParent(ctx, child.ID, p2.ID))
 	assert.ErrorIs(t, db.Store.RemoveParent(ctx, child.ID, p3.ID), knowledge.ErrLastParentViolation)

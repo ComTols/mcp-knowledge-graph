@@ -81,7 +81,7 @@ Next to `/mcp` the server ships a small browser UI (embedded in the binary, no e
 | `/ui/` | Interactive graph (Cytoscape.js). Bold blue edges lead to the primary parent, thin dashed orange edges to further parents. Hover a node for its summary, click it to open the document |
 | `/ui/viewer?id=<uuid>` | Markdown viewer for one document, with links to its parents and a back button |
 | `GET /graph` | The complete graph as Cytoscape.js JSON (`{"elements":{"nodes":[…],"edges":[…]}}`). The primary parent is `data.parent` of a node, every further parent is an edge with the class `secondary-parent` |
-| `GET /graph/fulltext?id=<uuid>` | One document as server-rendered Markdown (title, summary, parent links, content blocks) |
+| `GET /graph/fulltext?id=<uuid>` | One document as server-rendered Markdown (title, summary, parent and child links, content blocks) |
 
 Everything is protected by the same token as `/mcp`. Open `http://localhost:8080/ui/` in a browser; the login dialog accepts any user name and `KG_MCP_BEARER_TOKEN` as password. Scripts can use `Authorization: Bearer …` instead:
 
