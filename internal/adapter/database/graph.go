@@ -68,5 +68,6 @@ func (s *Store) GetGraph(ctx context.Context) (knowledge.Graph, error) {
 	if err != nil {
 		return knowledge.Graph{}, err
 	}
+	knowledge.AnnotateGraph(&g)
 	return g, nil
 }

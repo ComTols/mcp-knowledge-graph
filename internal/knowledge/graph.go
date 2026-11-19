@@ -33,6 +33,10 @@ type GraphNodeData struct {
 	// Summary is the short document summary (shown on hover in the UI).
 	Summary string     `json:"summary"`
 	Parent  *uuid.UUID `json:"parent,omitempty"`
+	// Weight is 11 for roots, otherwise 1..10 by recursive primary children.
+	Weight int `json:"weight"`
+	// Color is a hex RGB color (#rrggbb) from the hue wheel.
+	Color string `json:"color"`
 }
 
 // GraphEdge is a non-primary parent relation, directed from the parent

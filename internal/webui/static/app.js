@@ -39,6 +39,9 @@
   }
   const elements = { nodes: nodes.map((n) => ({ data: n.data })), edges };
 
+  // Node diameter grows with the weight (1..11) delivered by the backend.
+  const sizeOf = (n) => 8 + 5 * (n.data("weight") || 1);
+
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;
   const text = dark ? "#e4e7ee" : "#1d2330";
 
@@ -48,9 +51,9 @@
     wheelSensitivity: 0.3,
     style: [
       { selector: "node", style: {
-          "background-color": "#6366f1", label: "data(name)", color: text, "font-size": 11,
+          "background-color": "data(color)", label: "data(name)", color: text, "font-size": 11,
           "text-valign": "bottom", "text-margin-y": 4, "text-wrap": "ellipsis", "text-max-width": 120,
-          width: 18, height: 18 } },
+          width: (n) => sizeOf(n), height: (n) => sizeOf(n) } },
       { selector: "edge", style: { "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": 0.8 } },
       { selector: "edge.primary-parent", style: {
           "line-color": "#3b82f6", "target-arrow-color": "#3b82f6", width: 2.5 } },
@@ -74,7 +77,17 @@
       opts.directed = true;
       opts.spacingFactor = 1.1;
     }
-    if (name === "cose") opts.nodeRepulsion = () => 9000;
+    if (name === "cose") {
+      // One-shot repulsion simulation: heavier nodes push harder and get
+      // longer edges, so they end up with more room around them.
+      opts.randomize = true;
+      opts.numIter = 2500;
+      opts.nodeRepulsion = (n) => 2000 + 300 * Math.pow(n.data("weight") || 1, 2);
+      opts.nodeOverlap = 20;
+      opts.idealEdgeLength = (e) => (sizeOf(e.source()) + sizeOf(e.target())) / 2 + 40;
+      opts.edgeElasticity = () => 80;
+      opts.gravity = 0.4;
+    }
     cy.layout(opts).run();
   }
   $("layout").addEventListener("change", layout);
