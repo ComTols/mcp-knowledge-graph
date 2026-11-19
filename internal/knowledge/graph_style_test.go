@@ -32,9 +32,13 @@ func TestAnnotateGraph(t *testing.T) {
 	if c := g.Elements.Nodes[0].Data.Color; c != "#00ffff" {
 		t.Errorf("root color = %s, want #00ffff", c)
 	}
-	// node1 is the only child of root (t=0.5, w=1); its children node2 and
-	// node4 split that range: t=0.25 and t=0.75. node3 is node2's only child.
-	if got, want := g.Elements.Nodes[4].Data.Color, hexColor(rainbow(0.75)); got != want {
+	// node1 is the only child of root (t=0.5, w=1). Its children are split
+	// proportionally to subtree size: node2 (size 2) gets [0, 2/3] -> t=1/3,
+	// node4 (size 1) gets [2/3, 1] -> t=5/6.
+	if got, want := g.Elements.Nodes[2].Data.Color, hexColor(rainbow(1.0/3)); got != want {
+		t.Errorf("node2 color = %s, want %s", got, want)
+	}
+	if got, want := g.Elements.Nodes[4].Data.Color, hexColor(rainbow(5.0/6)); got != want {
 		t.Errorf("node4 color = %s, want %s", got, want)
 	}
 }

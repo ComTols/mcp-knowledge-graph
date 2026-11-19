@@ -24,7 +24,8 @@ const (
 // non-root nodes have the same count they all get 1.
 //
 // Color: the root has t=0.5 and width w=1. The children of a node split the
-// hue range [t-w/2, t+w/2] of their parent into equal parts (in node order);
+// hue range [t-w/2, t+w/2] of their parent proportionally to their subtree
+// size (recursive children + 1), in node order;
 // the color of a node is rainbow(t).
 func AnnotateGraph(g *Graph) {
 	nodes := g.Elements.Nodes
@@ -53,40 +54,24 @@ func AnnotateGraph(g *Graph) {
 		nodes[i].Data.Color = DefaultColor
 	}
 
-	// Iterative traversal from the roots (also guards against cycles, which
-	// are then simply never reached).
-	type item struct {
-		idx  int
-		t, w float64
-	}
+	// Iterative traversal from the roots; parents always precede their
+	// children in order (also guards against cycles, which are never reached).
 	counts := make([]int, len(nodes))
 	visited := make([]bool, len(nodes))
 	var order []int
-	var stack []item
-	for _, r := range roots {
-		stack = append(stack, item{r, 0.5, 1})
-	}
+	stack := append([]int(nil), roots...)
 	for len(stack) > 0 {
-		it := stack[len(stack)-1]
+		i := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		if visited[it.idx] {
+		if visited[i] {
 			continue
 		}
-		visited[it.idx] = true
-		order = append(order, it.idx)
-		nodes[it.idx].Data.Color = hexColor(rainbow(it.t))
-		kids := children[it.idx]
-		if len(kids) == 0 {
-			continue
-		}
-		cw := it.w / float64(len(kids))
-		for k, c := range kids {
-			stack = append(stack, item{c, it.t - it.w/2 + cw*(float64(k)+0.5), cw})
-		}
+		visited[i] = true
+		order = append(order, i)
+		stack = append(stack, children[i]...)
 	}
 
-	// Recursive child counts: children are always visited after their parent,
-	// so walking the order backwards accumulates bottom-up.
+	// Recursive child counts, accumulated bottom-up.
 	parentOf := func(i int) (int, bool) {
 		p := nodes[i].Data.Parent
 		if p == nil {
@@ -99,6 +84,27 @@ func AnnotateGraph(g *Graph) {
 		i := order[k]
 		if pi, ok := parentOf(i); ok && visited[pi] {
 			counts[pi] += counts[i] + 1
+		}
+	}
+
+	// Colors, top-down: the range of a node is split among its children
+	// proportionally to their subtree size (counts+1).
+	ts := make([]float64, len(nodes))
+	ws := make([]float64, len(nodes))
+	for _, r := range roots {
+		ts[r], ws[r] = 0.5, 1
+	}
+	for _, i := range order {
+		nodes[i].Data.Color = hexColor(rainbow(ts[i]))
+		total := 0
+		for _, c := range children[i] {
+			total += counts[c] + 1
+		}
+		start := ts[i] - ws[i]/2
+		for _, c := range children[i] {
+			cw := ws[i] * float64(counts[c]+1) / float64(total)
+			ws[c], ts[c] = cw, start+cw/2
+			start += cw
 		}
 	}
 
